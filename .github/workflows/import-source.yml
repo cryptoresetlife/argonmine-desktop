@@ -14,17 +14,17 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Import the reviewed v0.2.1 archive
+      - name: Import the reviewed v0.2.2 archive
         shell: bash
         run: |
           set -euo pipefail
           git clone --depth 1 --branch main "https://github.com/${GITHUB_REPOSITORY}.git" "$RUNNER_TEMP/source-import"
           cd "$RUNNER_TEMP/source-import"
-          if test -f .source-imported-0.2.1; then
+          if test -f .source-imported-0.2.2; then
             echo 'This source archive has already been imported. No changes.'
             exit 0
           fi
-          echo '6ffb4c9e3d4ab8fcd030e6a6ded676aa0d36bdede9ac32fdb59bec1c20e03e9d  source-release.zip' | sha256sum -c -
+          echo '0b98d1f87cb87c80d7ee5ea94b10d620eac51ae53f60d8631fe03ec034dda4e6  source-release.zip' | sha256sum -c -
           python3 - <<'PY'
           import zipfile, pathlib
           allowed = {'README.md','LICENSE','SECURITY.md','.gitignore','build.ps1','BUILD-NOTES.txt','使用说明.txt'}
@@ -39,7 +39,7 @@ jobs:
           PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          printf '%s\n' 'Reviewed v0.2.1 source imported once.' > .source-imported-0.2.1
-          git add -- source licenses README.md LICENSE SECURITY.md .gitignore build.ps1 BUILD-NOTES.txt 使用说明.txt .source-imported-0.2.1
-          git commit -m 'Import reviewed Argonmine Desktop 0.2.1 source and licenses'
+          printf '%s\n' 'Reviewed v0.2.2 source imported once.' > .source-imported-0.2.2
+          git add -- source licenses README.md LICENSE SECURITY.md .gitignore build.ps1 BUILD-NOTES.txt 使用说明.txt .source-imported-0.2.2
+          git commit -m 'Import reviewed Argonmine Desktop 0.2.2 source and licenses'
           git -c credential.helper='!gh auth git-credential' push origin HEAD:main
