@@ -1,0 +1,30 @@
+Argonmine Desktop 0.2.1 (third-party experimental Windows x64 wrapper)
+
+Go 1.27 from source/:
+  go test -mod=readonly ./controller -run "TestDuty|TestMainnet"
+  go build -mod=readonly -trimpath -o ../bin/argonmine-gpu.exe ./controller
+  go build -mod=readonly -trimpath -o ../bin/argonmined.exe ./cmd/argonmined
+CUDA worker:
+  cmd /c build-worker.cmd
+GUI (.NET Framework 4.8, C# 5, Windows Forms):
+  powershell -File source/desktop/BUILD-GUI.ps1
+Recompute binaries.json after rebuilding node/miner/worker before using the GUI.
+Run ArgonmineDesktop.exe --self-test and --ui-self-test for non-GPU safety tests.
+The UI cancellation test writes only to a unique temp data directory, not the user's live node.
+The bounded node integration test ran on REGTEST with an ephemeral local port and verified
+authenticated RPC, exit code 0, cookie deletion and graceful 'bye'. No GPU or mainnet mining was started.
+
+Upstream source: https://github.com/argonchain-source/argonchain
+Pinned commit e428841b44320fe3a2096c137ae044a2edc0b9f1, source/LICENSE.
+CUDA upstream: https://github.com/WebDollar/argon2-gpu
+Pinned commit f5fce223d16769f202449c9b0837ad3533304acd. Fork LICENSE says MIT, but inherited source files carry GPL-2.0-or-later notices; the combined CUDA worker is distributed respecting GPL-2.0-or-later. See licenses/GPL-2.0.txt and the included complete worker source.
+Local kernel/controller changes: see source and BUILD.txt from the standalone share build.
+Desktop node change: optional -stopfile local shutdown marker, no consensus or P2P changes.
+Desktop controller changes: explicit mainnet address-check mode and loopback RPC URI validation.
+GUI: local-only RPC, separate LocalAppData state, cancelable start intent, no autostart,
+no wallet signing, own-process Job isolation, staged sync gates and CPU/GPU startup self-test.
+UI source and local modifications are MIT licensed; preserve upstream notices.
+
+0.2.0: CUDA fatbinary sm_75/80/86/89/90/100/103/110/120/121 plus compute_75 PTX. No model-name whitelist. Static CUDA Driver API detection, 8s process deadline, UUID binding, architecture/memory eligibility, adaptive batch with free-memory fallback. GUI build script also compiles detector. Actual validation performed only on local RTX5090 static metadata; no additional GPU mining test on the busy card and no other models claimed hardware-verified.
+
+
