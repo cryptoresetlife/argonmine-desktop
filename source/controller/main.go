@@ -414,6 +414,8 @@ func main() {
 		log.Fatal("invalid duty/pause")
 	}
 	if !*testOnly {
+		cwd, _ := os.Getwd()
+		log.Printf("startup working directory: %s", cwd)
 		if _, err := os.Stat("STOPPED"); err == nil {
 			log.Fatal("STOPPED marker exists")
 		}

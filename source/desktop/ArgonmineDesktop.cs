@@ -17,6 +17,7 @@ static class Program {
     [STAThread] static int Main(string[] args) {
         Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
         if (args.Contains("--self-test")) return Tests.Run();
+        if (args.Contains("--rpc-self-test")) return Tests.LiveRpc();
         if (args.Contains("--ui-self-test")) {
             int code=0;
             using(var testForm=new MainWindow(false,Path.Combine(Path.GetTempPath(),"ArgonmineGuiStopTest-"+Guid.NewGuid().ToString("N")))) {
@@ -162,9 +163,19 @@ sealed class Engine : IDisposable {
         }
     }
     public Snapshot ReadSnapshot() {
-        var c=(Dictionary<string,object>)Rpc("getblockchaininfo"); var peers=(object[])Rpc("getpeerinfo");
-        var s=new Snapshot { Genesis=(string)c["genesis"],Height=Convert.ToInt64(c["blocks"]),Syncing=Convert.ToBoolean(c["initialblockdownload"]),TipTime=Convert.ToInt64(c["time"]),Peers=peers.Length };
-        foreach(Dictionary<string,object> p in peers) s.PeerHeight=Math.Max(s.PeerHeight,Convert.ToInt64(p["startheight"]));
+        return ParseSnapshot((Dictionary<string,object>)Rpc("getblockchaininfo"),Rpc("getpeerinfo"));
+    }
+    public static Snapshot ParseSnapshot(Dictionary<string,object> c,object peerResult) {
+        // Deserialize<Dictionary<string,object>> represents nested JSON arrays as ArrayList.
+        // Accept the collection contract instead of assuming object[].
+        var peers=peerResult as System.Collections.IEnumerable;
+        if(peers==null || peerResult is string || peerResult is System.Collections.IDictionary)throw new FormatException("节点连接列表格式无效。");
+        var s=new Snapshot { Genesis=(string)c["genesis"],Height=Convert.ToInt64(c["blocks"]),Syncing=Convert.ToBoolean(c["initialblockdownload"]),TipTime=Convert.ToInt64(c["time"]) };
+        foreach(var entry in peers) {
+            var p=entry as Dictionary<string,object>;
+            if(p==null || !p.ContainsKey("startheight"))throw new FormatException("节点连接记录格式无效。");
+            s.Peers++; s.PeerHeight=Math.Max(s.PeerHeight,Convert.ToInt64(p["startheight"]));
+        }
         if(s.Genesis!=Genesis) throw new Exception("节点创世块不匹配，已阻止挖矿。");
         return s;
     }
@@ -177,6 +188,8 @@ sealed class Engine : IDisposable {
         }
         if(File.Exists(Path.Combine(Run,"HALTED"))) throw new Exception("发现异常保护 HALTED。请打开日志排查，软件不会自动清除保护。");
         string stop=Path.Combine(Run,"STOPPED"); if(File.Exists(stop)) File.Delete(stop);
+        if(File.Exists(stop))throw new IOException("停止标记无法移除，请检查数据目录权限。");
+        Say("开挖前检查：本次手动启动已移除停止标记，计算目录 "+Run);
         minerJob=new ChildJob();
         try { Miner=Launch("argonmine-gpu.exe","-worker "+Q(Path.Combine(Root,"bin/argon-gpu-worker.exe"))+" -address "+Q(p.Address)+" -cookie "+Q(Path.Combine(Data,"node/rpc.cookie"))+" -rpc "+Endpoint+" -gpu-uuid "+p.GpuUUID+" -batch "+PlanBatch(p.MemoryBytes,p.Fast)+" -duty "+(p.Fast?"100":"80")+" -rounds 4 -pause 0ms -duration 0s",Run,Path.Combine(LogDir,"miner.log"),minerJob,p.GpuUUID); }
         catch { minerJob.Dispose(); minerJob=null; throw; }
@@ -210,7 +223,7 @@ sealed class MainWindow : Form {
     readonly RichTextBox logs=new RichTextBox(); readonly ProgressBar progress=new ProgressBar();
     readonly System.Windows.Forms.Timer timer=new System.Windows.Forms.Timer();
     readonly string config; readonly bool preview;
-    bool intent, pollBusy, starting, stopping, exiting, closeAllowed, detecting; int readyCount; string preferredUUID="";
+    bool intent, pollBusy, starting, stopping, exiting, closeAllowed, detecting; int readyCount; string preferredUUID="",lastRpcError="";
     int generation; DateTime minerStart; Preferences active;
     static readonly Color Bg=Color.FromArgb(14,20,31), PanelColor=Color.FromArgb(24,34,50), Ink=Color.FromArgb(231,239,250), Muted=Color.FromArgb(151,170,195), Accent=Color.FromArgb(59,211,170);
     public MainWindow(bool isPreview, string dataOverride=null) {
@@ -235,7 +248,7 @@ sealed class MainWindow : Form {
     void BuildUI() {
         var title=L("ARGONMINE",26,Ink); title.SetBounds(28,20,600,48); Controls.Add(title);
         var sub=L("本地节点 · 自动同步 · NVIDIA 显卡自动检测",11,Muted); sub.SetBounds(31,73,800,26); Controls.Add(sub);
-        var badge=L("第三方实验版  0.2.1",10,Accent); badge.SetBounds(757,38,215,27); badge.Anchor=AnchorStyles.Top|AnchorStyles.Right; Controls.Add(badge);
+        var badge=L("第三方实验版  0.2.2",10,Accent); badge.SetBounds(757,38,215,27); badge.Anchor=AnchorStyles.Top|AnchorStyles.Right; Controls.Add(badge);
         var box=new Panel{BackColor=PanelColor}; box.SetBounds(28,113,944,195); box.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right; Controls.Add(box);
         var a=L("你的 ARG 收款地址",11,Ink); a.SetBounds(20,16,600,26); box.Controls.Add(a);
         address.SetBounds(20,49,904,34); address.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right; address.Font=new Font("Consolas",11); address.BackColor=Bg; address.ForeColor=Ink; address.BorderStyle=BorderStyle.FixedSingle; box.Controls.Add(address);
@@ -332,6 +345,7 @@ sealed class MainWindow : Form {
         try {
             var s=await Task.Run(()=>engine.ReadSnapshot());
             if(session!=generation || stopping || exiting)return;
+            lastRpcError="";
             height.Text=s.Height.ToString("N0"); peers.Text=s.Peers.ToString();
             long now=DateTimeOffset.UtcNow.ToUnixTimeSeconds(); bool ready=s.Ready(now);
             progress.Style=ready?ProgressBarStyle.Continuous:ProgressBarStyle.Marquee; progress.Value=ready?100:0;
@@ -351,7 +365,7 @@ sealed class MainWindow : Form {
                 if(!ready)detail.Text="节点连接或同步状态发生变化，请留意日志；算力不代表有效主网收益。";
             } else if(!intent) { state.Text="节点同步中 / 挖矿未启动"; detail.Text=ready?"主网已同步。点击开始才会挖矿。":"当前高度 "+s.Height+" · 对端参考高度 "+s.PeerHeight+"。未设置自动开挖。"; }
             ControlsState();
-        } catch(Exception ex) { readyCount=0; if(session==generation&&!stopping&&!exiting) { detail.Text="等待本地节点响应。"; if(ex.Message.Contains("创世块")) { intent=false; ++generation; chainFault=ex.Message; } } }
+        } catch(Exception ex) { readyCount=0; if(session==generation&&!stopping&&!exiting) { detail.Text="读取节点状态失败："+ex.Message; string error=ex.GetType().Name+": "+ex.Message;if(error!=lastRpcError){AppendLog("节点状态读取失败："+error);lastRpcError=error;} if(ex.Message.Contains("创世块")) { intent=false; ++generation; chainFault=ex.Message; } } }
         finally { pollBusy=false; }
  if(chainFault!=null) { await StopSession(false); state.Text="主网验证失败"; detail.Text=chainFault; }
     }
@@ -360,6 +374,14 @@ sealed class MainWindow : Form {
 
 static class Tests {
     static void Assert(bool b,string message) { if(!b)throw new Exception(message); }
+    public static int LiveRpc() {
+        var root=AppDomain.CurrentDomain.BaseDirectory;
+        try {
+            var e=new Engine(root,Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ArgonmineDesktop"));
+            var s=e.ReadSnapshot();
+            File.WriteAllText(Path.Combine(root,"RPC-SELFTEST-PASSED.json"),new JavaScriptSerializer().Serialize(new {height=s.Height,peers=s.Peers,peerHeight=s.PeerHeight,syncing=s.Syncing,ready=s.Ready(DateTimeOffset.UtcNow.ToUnixTimeSeconds())}));return 0;
+        } catch(Exception ex){File.WriteAllText(Path.Combine(root,"RPC-SELFTEST-FAILED.txt"),ex.ToString());return 1;}
+    }
     public static int Run() {
         try {
             long now=DateTimeOffset.UtcNow.ToUnixTimeSeconds(); var s=new Snapshot{Genesis=Engine.Genesis,Height=100,PeerHeight=100,TipTime=now,Peers=1,Syncing=false};
@@ -370,6 +392,14 @@ static class Tests {
             Assert(Engine.PlanBatch(8L*1024*1024*1024,false)==256,"8GB daily allocation");
             Assert(Engine.PlanBatch(8L*1024*1024*1024,true)==512,"8GB fast allocation");
             Assert(Engine.PlanBatch(32L*1024*1024*1024,true)==2048,"32GB fast allocation");
+            var rpcJson=new JavaScriptSerializer();
+            var chain=new Dictionary<string,object>{{"genesis",Engine.Genesis},{"blocks",2080},{"initialblockdownload",false},{"time",now}};
+            var response=rpcJson.Deserialize<Dictionary<string,object>>("{\"result\":[{\"startheight\":2079},{\"startheight\":2080}]}");
+            Assert(response["result"] is System.Collections.ArrayList,"regression must exercise actual nested JSON array representation");
+            var parsed=Engine.ParseSnapshot(chain,response["result"]);
+            Assert(parsed.Peers==2 && parsed.PeerHeight==2080 && parsed.Ready(now),"synced RPC ArrayList must allow mining");
+            Assert(!Engine.ParseSnapshot(chain,new object[0]).Ready(now),"empty peer array must block mining");
+            bool invalidPeers=false;try{Engine.ParseSnapshot(chain,"not an array");}catch(FormatException){invalidPeers=true;}Assert(invalidPeers,"malformed peer list accepted");
             var root=AppDomain.CurrentDomain.BaseDirectory; var e=new Engine(root,Path.Combine(Path.GetTempPath(),"ArgonmineGuiTests-"+Guid.NewGuid().ToString("N")));
             e.Verify(); e.ValidateAddress("arg1qt8m4tkg5a2yvxlqumdvvuqza8nekrfzk8dhu6cnh5af9cy55atsq7zefrm");
             bool bad=false; try {e.ValidateAddress("arg1invalid");}catch{bad=true;} Assert(bad,"bad address accepted");

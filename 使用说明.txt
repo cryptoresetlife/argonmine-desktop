@@ -1,4 +1,4 @@
-Argonmine Desktop 0.2.1 — NVIDIA自动检测版（Windows 10/11 x64）
+Argonmine Desktop 0.2.2 — NVIDIA自动检测版（Windows 10/11 x64）
 
 邀请入口：点击界面中的「官方网页（邀请链接）」会在浏览器打开分享者的邀请链接。
 https://app.argonmine.com/?ref=arg1qt8m4tkg5a2yvxlqumdvvuqza8nekrfzk8dhu6cnh5af9cy55atsq7zefrm
@@ -58,4 +58,7 @@ binaries.json / SHA256SUMS.txt提供包内程序校验值；不能替代发行�
 未为了测试额外占用正在挖矿的本机5090；每次真正开挖前仍会自动进行CPU/GPU一致性自检。
 原矿工在本机5090高性能模式实测约84.8–86k H/s，不保证其他机器速度或稳定性相同。
 不会附带原用户的钱包密钥、节点认证或历史收入。
+
+
+v0.2.2修复：节点同步完成后不开挖的RPC数组解析错误；本机节点高度2083、CPU/GPU自检2048组通过、日常模式短样本约45k H/s。其他型号尚未实卡验收。
 

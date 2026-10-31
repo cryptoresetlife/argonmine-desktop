@@ -6,7 +6,7 @@ Windows NVIDIA GPU SOLO miner with a graphical interface, a bundled local Argonm
 
 ## 下载与使用
 
-从 [Releases](https://github.com/cryptoresetlife/argonmine-desktop/releases) 下载 `Argonmine-Desktop-0.2.1-Windows-NVIDIA.zip`，完整解压后双击 `ArgonmineDesktop.exe`。
+从 [Releases](https://github.com/cryptoresetlife/argonmine-desktop/releases) 下载 `Argonmine-Desktop-0.2.2-Windows-NVIDIA.zip`，完整解压后双击 `ArgonmineDesktop.exe`。
 
 1. 填自己的 **ARG 主网收款地址**，不需要私钥、助记词或钱包文件。
 2. 软件自动识别 NVIDIA 显卡，显示型号和显存；多卡时可选择一张。
@@ -28,7 +28,7 @@ Windows NVIDIA GPU SOLO miner with a graphical interface, a bundled local Argonm
 - 高性能模式可能影响桌面响应；满载开发测试曾发生卡死，建议先用日常模式。
 - 显示本地块高、连接节点、平均算力、候选提交数与日志。不读取显卡温度，不修改功耗、频率或风扇。
 
-**验证范围：**已在本机 RTX5090 验证静态检测。地址校验、同步条件、显存档位、开始后立即停止、进程隔离退出测试通过；本地节点在 REGTEST 上完成正常关机测试。其他显卡尚未逐型号实卡验收，检测通过不等于已验证兼容，每次开挖须先通过 CPU/GPU 自检。图形界面发行版尚未完成 GPU 实挖验收。
+**验证范围：**已在本机 RTX5090 验证静态检测。地址校验、同步条件、显存档位、开始后立即停止、进程隔离退出测试通过；本地节点在 REGTEST 上完成正常关机测试。其他显卡尚未逐型号实卡验收，检测通过不等于已验证兼容，每次开挖须先通过 CPU/GPU 自检。v0.2.2 已在本机 RTX5090 日常模式完成实挖启动验收，短样本约45k H/s；这不代表其他显卡已验收或长期收益保证。
 
 原始部署在 RTX5090 高性能档实测约84.8–86k H/s，并产生过有效主网区块；这些数据不能作为本发行版或其他显卡的性能、收益保证。
 
@@ -79,3 +79,7 @@ CUDA脚本默认使用官方工具安装路径；安装位置不同时修改`sou
 根目录`LICENSE`提供GPLv2完整文本，`licenses/`与源文件保留其他许可。发布包随附对应源码与构建说明。节点只增加可选的`-stopfile`正常退出标记，没有修改共识或P2P规则。
 
 欢迎通过 Issues 提供显卡型号、驱动版本和去除敏感信息后的报错。**不要上传助记词、私钥、cookie或钱包文件。**
+
+## v0.2.2 修复
+修复 getpeerinfo 的嵌套 JSON 数组在 .NET 中反序列化为 ArrayList，而界面误强转为 object[] 的问题。旧版会在同步完成后一直显示等待节点响应。新增实际响应格式回归测试、实时只读 RPC 测试、错误去重显示及开挖前停止标记检查。
+
